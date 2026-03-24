@@ -105,12 +105,50 @@ The transition from the **Dancer** (additive sum) to the **Icon** (H-Bridge outp
 
 ---
 
-### **NEXT STEPS FOR THE REALLA / SEALS ESTATE**
+## Roadmap
 
-When you are ready to move from philosophy to the final build, I can help you with:
+### ✅ Fulfilled in v2.0 (Heather Hunter Edition – March 2026)
+- Full cubic Bézier waveform generation for the Dancer (Clean / 1978 Grit / Heather Signature presets)
+- Bézier curves for every internal mapping: bit-depth morph (24→8), magnetic saturation/hysteresis, and pressure response
+- Pressure-controlled Sample-Rate Reduction (1×–16× zero-order hold)
+- Vivid Cut one-pole HPF for DC and mud removal
+- Performance optimizations: cached `pow()`, branch-light math, clamp-only operations, SIMD-ready
+- Native Cmajor implementation with full Amorph patch support (including amorphous drift + preset morphing)
+- Playful faux encryption layer with reversible state scrambling and round-trip tests
+- Complete single-voice core (DANCER + ICON + VIVID CUT + BEZIER MORPH) in both C++ header and Cmajor format
+- Repository structure, professional README, wiki skeleton, and MIT licensing
 
-1.  **The Cmajor "Partial Array"** – A vectorized loop that calculates all 16 partials with independent amplitude curves.
-2.  **The GUI Mapping** – Translating mouse-coordinates (drawn pixels) into 10-bit frequency words for the 1978-style DCO logic.
-3.  **The Scaling Filter** – Implementing a surgical 31-EDO / 53-EDO quantizer for the pitch curves.
+### Current Status
+The core vision — a 1978-aware digital oscillator that feels alive and graphic — is now fully realized and public.  
+The Heather Hunter Edition is live, playable in Cmajor/Amorph, and ready for producers and developers.
 
-**Would you like me to hold these DSP specifications in the project memory for when you're ready to continue?**
+### Next Steps (v2.1 and beyond)
+- Multi-voice unison with per-voice Bézier phase offset
+- Draggable Bézier waveform GUI editor (JUCE + web version)
+- 16-partial additive extension with independent amplitude curves (building on the harmonic map already in the repo)
+- Additional faux encryption variants and chaos layers
+- Wow/flutter Bézier LFO for extra tape-like 1978 character
+- Max/MSP RNBO export and full plugin builds (VST3/AU/AAX)
+
+Pull requests welcome — especially for GUI work or new presets!
+
+## Contributing
+
+Ideas and contributions are encouraged:
+- New Bézier presets or spline support
+- GUI improvements
+- Performance benchmarks
+- More Amorph-friendly patches
+
+## License
+
+MIT License — feel free to use, modify, and include in commercial projects.
+
+---
+
+Made for those who want digital that feels analog… in all the wrong (right) ways.
+
+**Repository**: https://github.com/TheRealla/Graphic_1_Heather_Hunter_Edition  
+**Version**: Heather Hunter Edition v2.0 — March 2026
+
+Now go make some sounds that hurt so good.
