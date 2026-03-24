@@ -1,0 +1,140 @@
+// =============================================================================
+// SEALS ESTATE — HEATHER HUNTER EDITION
+// Amorph Patch: GraphicHBridge Amorph Morph
+// DANCER + ICON + VIVID CUT + BEZIER MORPH + AMORPHOUS DRIFT
+// Fully morphing 1978 digital grit oscillator for Amorph
+// =============================================================================
+
+{
+    "id": "seals.estate.graphic.amorph.heather",
+    "name": "GraphicHBridge Amorph Morph — Heather Hunter Edition",
+    "version": "2.1",
+    "manufacturer": "SEALS ESTATE x Amorph",
+    "description": "Morphing Bézier-powered 1978 grit oscillator. Clean hi-fi sine → crushed digital soul with amorphous drift. Perfect for evolving pads, basses, and textures.",
+    "processor": {
+        "name": "GraphicAmorphHeather",
+        "inputs": [
+            { "id": "frequency", "name": "Frequency", "type": "float", "default": 440.0 }
+        ],
+        "outputs": [
+            { "id": "audio", "name": "Audio Out", "type": "audio", "channels": 1 }
+        ],
+        "parameters": [
+            {
+                "id": "digitalPressure",
+                "name": "Digital Pressure (Morph)",
+                "type": "float",
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.5,
+                "step": 0.001
+            },
+            {
+                "id": "morphSpeed",
+                "name": "Amorphous Drift Speed",
+                "type": "float",
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.2,
+                "step": 0.001
+            },
+            {
+                "id": "chaosAmount",
+                "name": "Chaos / Drift Amount",
+                "type": "float",
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.3,
+                "step": 0.001
+            }
+        ],
+        "state": {
+            "phase": 0.0,
+            "xPrev": 0.0,
+            "yPrev": 0.0,
+            "heldSample": 0.0,
+            "srrCounter": 0,
+            "lastBitDepth": -1.0,
+            "lastHalfLevels": 0.0,
+            "driftPhase": 0.0
+        },
+        "code": `
+            struct CubicBezier {
+                float y0, y1, y2, y3;
+                inline float eval(float t) const {
+                    t = clamp(t, 0.0f, 1.0f);
+                    float u = 1.0f - t;
+                    return u*u*u*y0 + 3.0f*u*u*t*y1 + 3.0f*u*t*t*y2 + t*t*t*y3;
+                }
+            };
+
+            // Bézier presets
+            static const CubicBezier dancerClean   = { 0.0f,  0.6f,  1.0f,  0.0f };
+            static const CubicBezier dancerGrit    = { 0.0f,  1.2f, -0.9f,  0.0f };
+            static const CubicBezier dancerHeather = { 0.0f,  0.3f, -1.1f,  0.0f };
+
+            static const CubicBezier bitDepthCurve = {24.0f, 22.0f, 12.0f,  8.0f };
+            static const CubicBezier satCurve      = {-1.0f, -0.4f,  0.6f,  1.0f };
+
+            constexpr float twoPi = 6.28318530717958647692f;
+            constexpr float aHPF  = 0.995f;
+
+            float p = clamp(digitalPressure, 0.0f, 1.0f);
+
+            // Amorphous Drift: slow chaotic modulation of pressure
+            driftPhase += morphSpeed * 0.01f * sampleRate / 48000.0f;  // normalize to ~48k
+            if (driftPhase >= twoPi) driftPhase -= twoPi;
+            float drift = chaosAmount * sinf(driftPhase) * 0.1f;
+            float morphedPressure = clamp(p + drift, 0.0f, 1.0f);
+
+            // Morph between the three dancers using pressure
+            float cleanWeight = 1.0f - morphedPressure;
+            float gritWeight  = morphedPressure * (1.0f - morphedPressure) * 2.0f;
+            float heatherWeight = morphedPressure * morphedPressure;
+
+            // 1. THE DANCER — morphed Bézier waveform
+            float increment = frequency * (twoPi / sampleRate);
+            phase += increment;
+            if (phase >= twoPi) phase -= twoPi;
+            if (phase < 0.0f) phase += twoPi;
+
+            float t = phase / twoPi;
+            float dancerSignal = cleanWeight   * dancerClean.eval(t)   +
+                                 gritWeight    * dancerGrit.eval(t)    +
+                                 heatherWeight * dancerHeather.eval(t);
+
+            // 2. SAMPLE-RATE REDUCTION
+            int hold = 1 + int(morphedPressure * 15.0f);
+            if (srrCounter == 0) {
+                heldSample = dancerSignal;
+                srrCounter = hold - 1;
+            } else {
+                --srrCounter;
+            }
+
+            // 3. MAGNETIC HYSTERESIS — Bézier saturation
+            float driven = heldSample * 1.2f;
+            float saturated = satCurve.eval((driven + 1.5f) / 3.0f);
+
+            // 4. THE ICON — Quantization with cache
+            float targetBitDepth = bitDepthCurve.eval(morphedPressure);
+            if (targetBitDepth != lastBitDepth) {
+                lastBitDepth = targetBitDepth;
+                float levels = pow(2.0f, targetBitDepth);
+                lastHalfLevels = levels * 0.5f - 1.0f;
+            }
+            float scaled = saturated * lastHalfLevels;
+            float quantized = round(scaled) / lastHalfLevels;
+
+            // 5. VIVID CUT
+            float x = quantized;
+            float y = x - xPrev + aHPF * yPrev;
+            xPrev = x;
+            yPrev = y;
+
+            // Output with subtle amorphous noise floor (optional character)
+            float noise = chaosAmount * 0.008f * (rand() * 2.0f - 1.0f);  // very light
+            output.audio[0] = y + noise;
+        `
+    }
+}
