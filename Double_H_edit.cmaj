@@ -1,0 +1,98 @@
+// -----------------------------------------------------------------------------
+// SEALS ESTATE - PRECISION SYNTHESIS ENGINE (PROMPT 57)
+// "GraphicHBridge" — DANCER + ICON + VIVID CUT (1978 Mode Aware)
+// -----------------------------------------------------------------------------
+
+struct GraphicHBridge
+{
+    // External control
+    float sampleRate;          // e.g. 48000.0f
+    float targetFrequency;     // From Pitch Curve (Hz)
+    float digitalPressure;     // 0.0 = High-Fidelity, 1.0 = 1978 Grit
+
+    // Internal state
+    float phase = 0.0f;
+    float xPrev = 0.0f;        // previous input to HPF
+    float yPrev = 0.0f;        // previous output of HPF
+
+    // Sample-rate-reduction state
+    float heldSample = 0.0f;
+    int   srrCounter = 0;
+
+    static constexpr float twoPi = 6.28318530717958647692f;
+
+    // --- NON-LINEAR HYSTERESIS FUNCTION ---
+    // Symmetric, "expensive" soft clipping
+    static inline float applyExpensiveSaturation (float x)
+    {
+        return x / (1.0f + std::fabs (x));
+    }
+
+    // Process one sample
+    float process()
+    {
+        // Clamp digitalPressure to [0, 1]
+        float p = std::fmax (0.0f, std::fmin (1.0f, digitalPressure));
+
+        // ---------------------------------------------------------------------
+        // 1. THE DANCER (Precision Additive Oscillator – here: single sine)
+        // ---------------------------------------------------------------------
+        float increment = targetFrequency * (twoPi / sampleRate);
+        phase += increment;
+        if (phase >= twoPi) phase -= twoPi;
+        if (phase <  0.0f)  phase += twoPi;
+
+        float dancerSignal = std::sinf (phase);
+
+        // ---------------------------------------------------------------------
+        // 2. Optional SAMPLE-RATE REDUCTION tied to digitalPressure
+        // ---------------------------------------------------------------------
+        // Map pressure 0..1 to hold factor 1..16
+        int maxHold = 16;
+        int hold    = 1 + static_cast<int> (p * float (maxHold - 1));
+
+        if (srrCounter == 0)
+        {
+            heldSample = dancerSignal;
+            srrCounter = hold - 1;
+        }
+        else
+        {
+            --srrCounter;
+        }
+
+        float srrSignal = heldSample;
+
+        // ---------------------------------------------------------------------
+        // 3. MAGNETIC HYSTERESIS (Expensive Texture)
+        // ---------------------------------------------------------------------
+        float driven = srrSignal * 1.2f;              // internal drive trim
+        float saturated = applyExpensiveSaturation (driven);
+
+        // ---------------------------------------------------------------------
+        // 4. THE ICON (Quantization / H-Bridge Morph)
+        // ---------------------------------------------------------------------
+        // Map digitalPressure: 0 → ~24-bit, 1 → 8-bit
+        float bitDepth = 24.0f + p * (8.0f - 24.0f);  // interpolate (24 -> 8)
+
+        // Uniform symmetric quantizer in [-1, 1]
+        float levels = std::pow (2.0f, bitDepth);
+        float halfLevels = levels * 0.5f - 1.0f;      // signed steps
+        float scaled = saturated * halfLevels;
+        float quantized = std::round (scaled) / halfLevels;
+
+        // ---------------------------------------------------------------------
+        // 5. VIVID CUT (One-pole high-pass, DC + mud removal)
+        // ---------------------------------------------------------------------
+        // y[n] = x[n] - x[n-1] + a * y[n-1], with a ≈ 0.995
+        float a = 0.995f;
+        float x = quantized;
+        float y = x - xPrev + a * yPrev;
+
+        xPrev = x;
+        yPrev = y;
+
+        return y;  // Final output sample
+    }
+};
+
