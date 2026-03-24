@@ -1,0 +1,137 @@
+# tests/faux_encryption_test.cmajor
+
+// =============================================================================
+// SEALS ESTATE — HEATHER HUNTER EDITION
+// Faux Encryption Round-Trip Test
+// Tests reversible "encryption" of internal oscillator state
+// Demonstrates the playful faux encryption layer with zero data loss
+// =============================================================================
+
+{
+    "id": "seals.estate.graphic.heather.faux.encryption.test",
+    "name": "GraphicHBridgeHeather — Faux Encryption Test",
+    "version": "2.0",
+    "manufacturer": "SEALS ESTATE",
+    "description": "Verifies that the faux encryption / decryption round-trip on internal state (phase, heldSample, filter memory) returns bit-identical results within floating-point precision.",
+    "processor": {
+        "name": "FauxEncryptionTest",
+        "inputs": [],
+        "outputs": [
+            { "id": "audio", "name": "Audio Out", "type": "audio", "channels": 1 }
+        ],
+        "parameters": [
+            {
+                "id": "digitalPressure",
+                "name": "Digital Pressure",
+                "type": "float",
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.7,
+                "step": 0.001
+            }
+        ],
+        "state": {
+            "phase": 0.0,
+            "xPrev": 0.0,
+            "yPrev": 0.0,
+            "heldSample": 0.0,
+            "srrCounter": 0,
+            "lastBitDepth": -1.0,
+            "lastHalfLevels": 0.0,
+            "encryptedPhase": 0.0,
+            "encryptedHeld": 0.0,
+            "encryptedXPrev": 0.0,
+            "encryptedYPrev": 0.0
+        },
+        "code": `
+            // Simple faux encryption: reversible chaotic transform (not real crypto)
+            inline float fauxEncrypt(float x, float key) {
+                return x * 1.6180339887f + key * 0.314159265f;   // golden ratio + pi influence
+            }
+
+            inline float fauxDecrypt(float x, float key) {
+                return (x - key * 0.314159265f) / 1.6180339887f;
+            }
+
+            constexpr float twoPi = 6.28318530717958647692f;
+            constexpr float aHPF = 0.995f;
+
+            float p = clamp(digitalPressure, 0.0f, 1.0f);
+
+            // === ORIGINAL STATE (before encryption) ===
+            float originalPhase = phase;
+            float originalHeld = heldSample;
+            float originalXPrev = xPrev;
+            float originalYPrev = yPrev;
+
+            // === FAUX ENCRYPTION ===
+            float key = 0.2718281828f;  // e constant for extra flavor
+            encryptedPhase = fauxEncrypt(originalPhase, key);
+            encryptedHeld   = fauxEncrypt(originalHeld, key);
+            encryptedXPrev  = fauxEncrypt(originalXPrev, key);
+            encryptedYPrev  = fauxEncrypt(originalYPrev, key);
+
+            // === DECRYPT BACK ===
+            float decryptedPhase = fauxDecrypt(encryptedPhase, key);
+            float decryptedHeld   = fauxDecrypt(encryptedHeld, key);
+            float decryptedXPrev  = fauxDecrypt(encryptedXPrev, key);
+            float decryptedYPrev  = fauxDecrypt(encryptedYPrev, key);
+
+            // === VERIFY ROUND-TRIP (should be almost identical) ===
+            float phaseError = fabs(decryptedPhase - originalPhase);
+            float heldError  = fabs(decryptedHeld - originalHeld);
+            float xError     = fabs(decryptedXPrev - originalXPrev);
+            float yError     = fabs(decryptedYPrev - originalYPrev);
+
+            float maxError = max(max(phaseError, heldError), max(xError, yError));
+
+            // Log result once (in real host this would print to console)
+            if (maxError > 1e-6f) {
+                // In a real test you would see a failure message here
+                output.audio[0] = 0.0f;  // silent on failure
+            } else {
+                // === Run the actual oscillator with decrypted state to prove transparency ===
+                phase = decryptedPhase;
+                heldSample = decryptedHeld;
+                xPrev = decryptedXPrev;
+                yPrev = decryptedYPrev;
+
+                // Quick dummy process cycle to generate output
+                float increment = 440.0f * (twoPi / sampleRate);
+                phase += increment;
+                if (phase >= twoPi) phase -= twoPi;
+                if (phase < 0.0f) phase += twoPi;
+
+                float t = phase / twoPi;
+                float dancerSignal = sinf(t * twoPi);   // simplified sine for test
+
+                int hold = 1 + int(p * 15.0f);
+                if (srrCounter == 0) {
+                    heldSample = dancerSignal;
+                    srrCounter = hold - 1;
+                } else {
+                    --srrCounter;
+                }
+
+                float driven = heldSample * 1.2f;
+                float saturated = driven / (1.0f + fabs(driven));
+
+                float bitDepth = 24.0f + p * (8.0f - 24.0f);
+                float levels = pow(2.0f, bitDepth);
+                float halfLevels = levels * 0.5f - 1.0f;
+                float scaled = saturated * halfLevels;
+                float quantized = round(scaled) / halfLevels;
+
+                float x = quantized;
+                float y = x - xPrev + aHPF * yPrev;
+                xPrev = x;
+                yPrev = y;
+
+                output.audio[0] = y;
+            }
+
+            // In a real Cmajor host or test runner you can check:
+            // "✓ Faux encryption round-trip passed (max error: " + maxError + ")"
+        `
+    }
+}
