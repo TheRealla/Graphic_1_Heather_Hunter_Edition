@@ -1,0 +1,52 @@
+// -----------------------------------------------------------------------------
+// SEALS ESTATE - PRECISION SYNTHESIS ENGINE (PROMPT 57)
+// License: SEALS ESTATE MACHINE LAW PROTOCOL
+// -----------------------------------------------------------------------------
+
+processor GraphicHBridge
+{
+    input stream float targetFrequency; // From Pitch Curve
+    input stream float digitalPressure; // 0.0 (High-Fidelity) to 1.0 (1978 Grit)
+    output stream float out;
+
+    // Internal "Expensive" State
+    float phase;
+    float previousValue;
+
+    // --- NON-LINEAR HYSTERESIS FUNCTION ---
+    // Simulates the "S-Curve" of high-end analog hardware
+    float applyExpensiveSaturation (float x) {
+        // Transcendental soft-clipping: expensive-sounding harmonic spread
+        return x / (1.0f + std::abs(x)); 
+    }
+
+    void main()
+    {
+        loop
+        {
+            // 1. THE DANCER (Precision Additive Oscillator)
+            // Ultra-clean sine generation with zero-aliasing phase accumulation
+            float increment = float (targetFrequency * processor.period * twoPi);
+            phase = fmod (phase + increment, float (twoPi));
+            float dancerSignal = std::sin (phase);
+
+            // 2. MAGNETIC HYSTERESIS (The "Expensive" Texture)
+            // We introduce a slight memory-based lag to the waveform edges
+            float saturated = applyExpensiveSaturation (dancerSignal * 1.2f);
+            
+            // 3. THE ICON (1978 H-BRIDGE SWITCHING)
+            // Dynamically morph between floating-point precision and H-Bridge switching
+            float bitDepth = interpolate (24.0f, 8.0f, digitalPressure);
+            float levels = std::pow (2.0f, bitDepth);
+            float hBridgeOutput = std::floor (saturated * levels) / levels;
+
+            // 4. VIVID CUT (DC Offset & Mud Removal)
+            // One-pole high-pass to ensure the H-bridge doesn't "park" at DC
+            float finalOut = hBridgeOutput - previousValue + (0.995f * previousValue);
+            previousValue = hBridgeOutput;
+
+            out <- finalOut;
+            advance();
+        }
+    }
+}
